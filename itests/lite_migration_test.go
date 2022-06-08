@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/filecoin-project/lotus/chain/actors"
+
 	"github.com/filecoin-project/lotus/chain/actors/builtin/system"
 
 	"github.com/filecoin-project/lotus/chain/state"
@@ -46,7 +48,7 @@ func TestLiteMigration(t *testing.T) {
 	stateRoot := ts.ParentState()
 	newManifestCid := makeTestManifest(t, ctxStore)
 
-	newStateRoot, err := filcns.LiteMigration(ctx, bs, newManifestCid, stateRoot)
+	newStateRoot, err := filcns.LiteMigration(ctx, bs, newManifestCid, stateRoot, actors.Version8, types.StateTreeVersion4, types.StateTreeVersion4)
 	require.NoError(t, err)
 
 	stateTree, err := state.LoadStateTree(ctxStore, newStateRoot)

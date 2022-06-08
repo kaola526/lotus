@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"time"
 
+	adt8 "github.com/filecoin-project/specs-actors/v8/actors/util/adt"
+
 	"github.com/docker/go-units"
 	"github.com/ipfs/go-cid"
 	cbor "github.com/ipfs/go-ipld-cbor"
@@ -17,7 +19,6 @@ import (
 	"github.com/filecoin-project/go-state-types/network"
 	"github.com/filecoin-project/go-state-types/rt"
 
-	system8 "github.com/filecoin-project/go-state-types/builtin/v8/system"
 	builtin0 "github.com/filecoin-project/specs-actors/actors/builtin"
 	miner0 "github.com/filecoin-project/specs-actors/actors/builtin/miner"
 	multisig0 "github.com/filecoin-project/specs-actors/actors/builtin/multisig"
@@ -32,8 +33,6 @@ import (
 	"github.com/filecoin-project/specs-actors/v6/actors/migration/nv14"
 	"github.com/filecoin-project/specs-actors/v7/actors/migration/nv15"
 	"github.com/filecoin-project/specs-actors/v8/actors/migration/nv16"
-	states8 "github.com/filecoin-project/specs-actors/v8/actors/states"
-	adt8 "github.com/filecoin-project/specs-actors/v8/actors/util/adt"
 
 	"github.com/filecoin-project/lotus/blockstore"
 	"github.com/filecoin-project/lotus/build"
@@ -1433,15 +1432,20 @@ func upgradeActorsV8Common(
 	return newRoot, nil
 }
 
-func UpgradeActorsCode(ctx context.Context, sm *stmgr.StateManager, newActorsManifestCid cid.Cid, root cid.Cid) (cid.Cid, error) {
+func UpgradeActorsCode(ctx context.Context, sm *stmgr.StateManager, newActorsManifestCid cid.Cid, root cid.Cid, av actors.Version, oldStateTreeVersion types.StateTreeVersion, newStateTreeVersion types.StateTreeVersion) (cid.Cid, error) { // nolint
 	bstore := sm.ChainStore().StateBlockstore()
-	return LiteMigration(ctx, bstore, newActorsManifestCid, root)
+	return LiteMigration(ctx, bstore, newActorsManifestCid, root, av, oldStateTreeVersion, newStateTreeVersion)
 }
 
-func LiteMigration(ctx context.Context, bstore blockstore.Blockstore, newActorsManifestCid cid.Cid, root cid.Cid) (cid.Cid, error) {
+func LiteMigration(ctx context.Context, bstore blockstore.Blockstore, newActorsManifestCid cid.Cid, root cid.Cid, av actors.Version, oldStateTreeVersion types.StateTreeVersion, newStateTreeVersion types.StateTreeVersion) (cid.Cid, error) {
 	buf := blockstore.NewTieredBstore(bstore, blockstore.NewMemorySync())
 	store := store.ActorStore(ctx, buf)
 	adtStore := adt8.WrapStore(ctx, store)
+
+	st, err := state.LoadStateTree(store, root)
+	if err != nil {
+		return cid.Undef, xerrors.Errorf("failed to load state tree: %w", err)
+	}
 
 	// Load the state root.
 	var stateRoot types.StateRoot
@@ -1449,7 +1453,7 @@ func LiteMigration(ctx context.Context, bstore blockstore.Blockstore, newActorsM
 		return cid.Undef, xerrors.Errorf("failed to decode state root: %w", err)
 	}
 
-	if stateRoot.Version != types.StateTreeVersion4 {
+	if stateRoot.Version != oldStateTreeVersion {
 		return cid.Undef, xerrors.Errorf(
 			"expected state root version 4 for actors code upgrade, got %d",
 			stateRoot.Version,
@@ -1457,21 +1461,11 @@ func LiteMigration(ctx context.Context, bstore blockstore.Blockstore, newActorsM
 	}
 
 	// Get old actors
-	actorsIn, err := states8.LoadTree(adtStore, stateRoot.Actors)
+	systemActor, err := st.GetActor(system.Address)
 	if err != nil {
-		return cid.Undef, xerrors.Errorf("failed to load state tree: %w", err)
-	}
-	systemActor, ok, err := actorsIn.GetActor(system.Address)
-	if !ok {
 		return cid.Undef, xerrors.Errorf("failed to get system actor: %w", err)
 	}
-	systemActorType := types.Actor{
-		Code:    systemActor.Code,
-		Head:    systemActor.Head,
-		Nonce:   systemActor.CallSeqNum,
-		Balance: systemActor.Balance,
-	}
-	systemActorState, err := system.Load(store, &systemActorType)
+	systemActorState, err := system.Load(store, systemActor)
 	if err != nil {
 		return cid.Undef, xerrors.Errorf("failed to load system actor state: %w", err)
 	}
@@ -1485,6 +1479,10 @@ func LiteMigration(ctx context.Context, bstore blockstore.Blockstore, newActorsM
 	if err := oldManifest.Load(ctx, adtStore); err != nil {
 		return cid.Undef, xerrors.Errorf("error loading old actor manifest: %w", err)
 	}
+	oldManifestData := manifest.ManifestData{}
+	if err := store.Get(ctx, oldManifest.Data, &oldManifestData); err != nil {
+		return cid.Undef, xerrors.Errorf("error loading old manifest data: %w", err)
+	}
 
 	// load new manifest
 	newManifest := manifest.Manifest{}
@@ -1494,6 +1492,13 @@ func LiteMigration(ctx context.Context, bstore blockstore.Blockstore, newActorsM
 	newManifestData := manifest.ManifestData{}
 	if err := store.Get(ctx, newManifest.Data, &newManifestData); err != nil {
 		return cid.Undef, xerrors.Errorf("error loading new manifest data: %w", err)
+	}
+
+	if len(newManifestData.Entries) != len(actors.GetBuiltinActorsKeys()) {
+		return cid.Undef, xerrors.Errorf("incomplete manifest with %d code CIDs", len(newManifestData.Entries))
+	}
+	if len(oldManifestData.Entries) != len(actors.GetBuiltinActorsKeys()) {
+		return cid.Undef, xerrors.Errorf("incomplete manifest with %d code CIDs", len(oldManifestData.Entries))
 	}
 
 	// Maps prior version code CIDs to migration functions.
@@ -1507,42 +1512,39 @@ func LiteMigration(ctx context.Context, bstore blockstore.Blockstore, newActorsM
 		migrations[oldCodeCid] = entry.Code
 	}
 
-	if len(migrations) != 11 {
-		return cid.Undef, xerrors.Errorf("incomplete manifest with %d code CIDs", len(migrations))
-	}
 	startTime := time.Now()
 
 	// Load output state tree
-	actorsOut, err := states8.NewTree(adtStore)
+	actorsOut, err := state.NewStateTree(adtStore, newStateTreeVersion)
 	if err != nil {
 		return cid.Undef, err
 	}
 
 	// Insert migrated records in output state tree.
-	err = actorsIn.ForEach(func(addr address.Address, actorIn *states8.Actor) error {
-		var newActor states8.Actor
+	err = st.ForEach(func(addr address.Address, actorIn *types.Actor) error {
+		var newActor types.Actor
 		newCid, ok := migrations[actorIn.Code]
 		if !ok {
 			return xerrors.Errorf("new code cid for system actor not found in migrations for actor %s", addr)
 		}
 		if addr == system.Address {
-			newSystemState := system8.State{BuiltinActors: newManifest.Data}
+			newSystemState, err := system.MakeState(store, av, newManifest.Data)
 			systemStateHead, err := store.Put(ctx, &newSystemState)
 			if err != nil {
 				return xerrors.Errorf("could not set system actor state head: %w", err)
 			}
-			newActor = states8.Actor{
-				Code:       newCid,
-				Head:       systemStateHead,
-				CallSeqNum: actorIn.CallSeqNum,
-				Balance:    actorIn.Balance,
+			newActor = types.Actor{
+				Code:    newCid,
+				Head:    systemStateHead,
+				Nonce:   actorIn.Nonce,
+				Balance: actorIn.Balance,
 			}
 		} else {
-			newActor = states8.Actor{
-				Code:       newCid,
-				Head:       actorIn.Head,
-				CallSeqNum: actorIn.CallSeqNum,
-				Balance:    actorIn.Balance,
+			newActor = types.Actor{
+				Code:    newCid,
+				Head:    actorIn.Head,
+				Nonce:   actorIn.Nonce,
+				Balance: actorIn.Balance,
 			}
 		}
 		err = actorsOut.SetActor(addr, &newActor)
@@ -1552,17 +1554,20 @@ func LiteMigration(ctx context.Context, bstore blockstore.Blockstore, newActorsM
 
 		return nil
 	})
+	if err != nil {
+		return cid.Undef, xerrors.Errorf("failed update actor states: %w", err)
+	}
 
 	elapsed := time.Since(startTime)
 	log.Infof("All done after %v. Flushing state tree root.", elapsed)
-	newHamtRoot, err := actorsOut.Flush()
+	newHamtRoot, err := actorsOut.Flush(ctx)
 	if err != nil {
 		return cid.Undef, xerrors.Errorf("failed to flush new actors: %w", err)
 	}
 
 	// Persist the result.
 	newRoot, err := store.Put(ctx, &types.StateRoot{
-		Version: types.StateTreeVersion4,
+		Version: newStateTreeVersion,
 		Actors:  newHamtRoot,
 		Info:    stateRoot.Info,
 	})
@@ -1571,7 +1576,6 @@ func LiteMigration(ctx context.Context, bstore blockstore.Blockstore, newActorsM
 	}
 
 	// Persist the new tree.
-
 	{
 		from := buf
 		to := buf.Read()

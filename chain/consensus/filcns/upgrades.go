@@ -31,7 +31,6 @@ import (
 	"github.com/filecoin-project/specs-actors/v5/actors/migration/nv13"
 	"github.com/filecoin-project/specs-actors/v6/actors/migration/nv14"
 	"github.com/filecoin-project/specs-actors/v7/actors/migration/nv15"
-	manifest8 "github.com/filecoin-project/specs-actors/v8/actors/builtin/manifest"
 	"github.com/filecoin-project/specs-actors/v8/actors/migration/nv16"
 	states8 "github.com/filecoin-project/specs-actors/v8/actors/states"
 	adt8 "github.com/filecoin-project/specs-actors/v8/actors/util/adt"
@@ -1434,8 +1433,13 @@ func upgradeActorsV8Common(
 	return newRoot, nil
 }
 
-func UpgradeActorsCode(ctx context.Context, sm *stmgr.StateManager, newActorsManifestCid cid.Cid, root cid.Cid) (cid.Cid, error) { // nolint
-	buf := blockstore.NewTieredBstore(sm.ChainStore().StateBlockstore(), blockstore.NewMemorySync())
+func UpgradeActorsCode(ctx context.Context, sm *stmgr.StateManager, newActorsManifestCid cid.Cid, root cid.Cid) (cid.Cid, error) {
+	bstore := sm.ChainStore().StateBlockstore()
+	return LiteMigration(ctx, bstore, newActorsManifestCid, root)
+}
+
+func LiteMigration(ctx context.Context, bstore blockstore.Blockstore, newActorsManifestCid cid.Cid, root cid.Cid) (cid.Cid, error) {
+	buf := blockstore.NewTieredBstore(bstore, blockstore.NewMemorySync())
 	store := store.ActorStore(ctx, buf)
 	adtStore := adt8.WrapStore(ctx, store)
 
@@ -1452,6 +1456,7 @@ func UpgradeActorsCode(ctx context.Context, sm *stmgr.StateManager, newActorsMan
 		)
 	}
 
+	// Get old actors
 	actorsIn, err := states8.LoadTree(adtStore, stateRoot.Actors)
 	if err != nil {
 		return cid.Undef, xerrors.Errorf("failed to load state tree: %w", err)
@@ -1467,33 +1472,32 @@ func UpgradeActorsCode(ctx context.Context, sm *stmgr.StateManager, newActorsMan
 		Balance: systemActor.Balance,
 	}
 	systemActorState, err := system.Load(store, &systemActorType)
+	if err != nil {
+		return cid.Undef, xerrors.Errorf("failed to load system actor state: %w", err)
+	}
 	oldActorsManifestCid := systemActorState.GetBuiltinActors()
 
 	// load old manifest
-	var oldManifest manifest8.Manifest
-	if err := adtStore.Get(ctx, oldActorsManifestCid, &oldManifest); err != nil {
-		return cid.Undef, xerrors.Errorf("error reading old actor manifest: %w", err)
+	oldManifest := manifest.Manifest{
+		Version: 1,
+		Data:    oldActorsManifestCid,
 	}
 	if err := oldManifest.Load(ctx, adtStore); err != nil {
 		return cid.Undef, xerrors.Errorf("error loading old actor manifest: %w", err)
 	}
 
 	// load new manifest
-	var newManifest manifest8.Manifest
-	if err := adtStore.Get(ctx, newActorsManifestCid, &newManifest); err != nil {
-		return cid.Undef, xerrors.Errorf("error reading new actor manifest: %w", err)
+	newManifest := manifest.Manifest{}
+	if err := store.Get(ctx, newActorsManifestCid, &newManifest); err != nil {
+		return cid.Undef, xerrors.Errorf("error loading new manifest: %w", err)
 	}
-	if err := newManifest.Load(ctx, adtStore); err != nil {
-		return cid.Undef, xerrors.Errorf("error loading new actor manifest: %w", err)
-	}
-
-	// Maps prior version code CIDs to migration functions.
-	migrations := make(map[cid.Cid]cid.Cid)
-
 	newManifestData := manifest.ManifestData{}
 	if err := store.Get(ctx, newManifest.Data, &newManifestData); err != nil {
 		return cid.Undef, xerrors.Errorf("error loading new manifest data: %w", err)
 	}
+
+	// Maps prior version code CIDs to migration functions.
+	migrations := make(map[cid.Cid]cid.Cid)
 
 	for _, entry := range newManifestData.Entries {
 		oldCodeCid, ok := oldManifest.Get(entry.Name)

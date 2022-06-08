@@ -23,6 +23,7 @@ import (
 	marketevents "github.com/filecoin-project/lotus/markets/loggers"
 	"github.com/filecoin-project/lotus/node/modules/dtypes"
 	"github.com/filecoin-project/lotus/node/repo/imports"
+	blocks "github.com/ipfs/go-block-format"
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"golang.org/x/xerrors"
@@ -73,6 +74,10 @@ type FullNodeStruct struct {
 		ChainHead func(p0 context.Context) (*types.TipSet, error) `perm:"read"`
 
 		ChainNotify func(p0 context.Context) (<-chan []*api.HeadChange, error) `perm:"read"`
+
+		ChainPutMany func(p0 context.Context, p1 []blocks.Block) error ``
+
+		ChainPutObj func(p0 context.Context, p1 blocks.Block) error ``
 
 		ChainReadObj func(p0 context.Context, p1 cid.Cid) ([]byte, error) `perm:"read"`
 
@@ -680,6 +685,28 @@ func (s *FullNodeStruct) ChainNotify(p0 context.Context) (<-chan []*api.HeadChan
 
 func (s *FullNodeStub) ChainNotify(p0 context.Context) (<-chan []*api.HeadChange, error) {
 	return nil, ErrNotSupported
+}
+
+func (s *FullNodeStruct) ChainPutMany(p0 context.Context, p1 []blocks.Block) error {
+	if s.Internal.ChainPutMany == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.ChainPutMany(p0, p1)
+}
+
+func (s *FullNodeStub) ChainPutMany(p0 context.Context, p1 []blocks.Block) error {
+	return ErrNotSupported
+}
+
+func (s *FullNodeStruct) ChainPutObj(p0 context.Context, p1 blocks.Block) error {
+	if s.Internal.ChainPutObj == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.ChainPutObj(p0, p1)
+}
+
+func (s *FullNodeStub) ChainPutObj(p0 context.Context, p1 blocks.Block) error {
+	return ErrNotSupported
 }
 
 func (s *FullNodeStruct) ChainReadObj(p0 context.Context, p1 cid.Cid) ([]byte, error) {

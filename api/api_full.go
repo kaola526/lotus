@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	blocks "github.com/ipfs/go-block-format"
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
 
@@ -119,6 +120,12 @@ type FullNode interface {
 
 	// ChainDeleteObj deletes node referenced by the given CID
 	ChainDeleteObj(context.Context, cid.Cid) error //perm:admin
+
+	// ChainPutObj puts a given object into the block store
+	ChainPutObj(context.Context, blocks.Block) error //perm:admin
+
+	// ChainPutMany puts a given array of objects into the block store
+	ChainPutMany(context.Context, []blocks.Block) error //perm:admin
 
 	// ChainHasObj checks if a given CID exists in the chain blockstore.
 	ChainHasObj(context.Context, cid.Cid) (bool, error) //perm:read

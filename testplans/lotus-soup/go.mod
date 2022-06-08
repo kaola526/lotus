@@ -7,11 +7,11 @@ require (
 	github.com/codeskyblue/go-sh v0.0.0-20200712050446-30169cf553fe
 	github.com/davecgh/go-spew v1.1.1
 	github.com/drand/drand v1.3.0
-	github.com/filecoin-project/go-address v0.0.6
+	github.com/filecoin-project/go-address v1.0.0
 	github.com/filecoin-project/go-data-transfer v1.15.1
 	github.com/filecoin-project/go-fil-markets v1.20.1
 	github.com/filecoin-project/go-jsonrpc v0.1.5
-	github.com/filecoin-project/go-state-types v0.1.3
+	github.com/filecoin-project/go-state-types v0.1.4
 	github.com/filecoin-project/go-storedcounter v0.1.0
 	github.com/filecoin-project/lotus v0.0.0-00010101000000-000000000000
 	github.com/filecoin-project/specs-actors v0.9.14
@@ -27,7 +27,7 @@ require (
 	github.com/ipfs/go-unixfs v0.3.1
 	github.com/ipld/go-car v0.3.3
 	github.com/kpacha/opencensus-influxdb v0.0.0-20181102202715-663e2683a27c
-	github.com/libp2p/go-libp2p v0.19.0
+	github.com/libp2p/go-libp2p v0.19.4
 	github.com/libp2p/go-libp2p-core v0.15.1
 	github.com/libp2p/go-libp2p-pubsub-tracer v0.0.0-20200626141350-e730b32bf1e6
 	github.com/multiformats/go-multiaddr v0.5.0
@@ -214,7 +214,7 @@ require (
 	github.com/libp2p/go-libp2p-noise v0.4.0 // indirect
 	github.com/libp2p/go-libp2p-peerstore v0.6.0 // indirect
 	github.com/libp2p/go-libp2p-pnet v0.2.0 // indirect
-	github.com/libp2p/go-libp2p-pubsub v0.6.1 // indirect
+	github.com/libp2p/go-libp2p-pubsub v0.7.0 // indirect
 	github.com/libp2p/go-libp2p-quic-transport v0.17.0 // indirect
 	github.com/libp2p/go-libp2p-record v0.1.3 // indirect
 	github.com/libp2p/go-libp2p-resource-manager v0.2.1 // indirect
@@ -235,8 +235,8 @@ require (
 	github.com/libp2p/go-stream-muxer-multistream v0.4.0 // indirect
 	github.com/libp2p/go-tcp-transport v0.5.1 // indirect
 	github.com/libp2p/go-ws-transport v0.6.0 // indirect
-	github.com/libp2p/go-yamux/v3 v3.1.1 // indirect
-	github.com/lucas-clemente/quic-go v0.27.0 // indirect
+	github.com/libp2p/go-yamux/v3 v3.1.2 // indirect
+	github.com/lucas-clemente/quic-go v0.27.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.0.3 // indirect
 	github.com/magefile/mage v1.9.0 // indirect
 	github.com/marten-seemann/qtls-go1-16 v0.1.5 // indirect
@@ -306,7 +306,7 @@ require (
 	github.com/weaveworks/promrus v1.2.0 // indirect
 	github.com/whyrusleeping/bencher v0.0.0-20190829221104-bb6607aa8bba // indirect
 	github.com/whyrusleeping/cbor v0.0.0-20171005072247-63513f603b11 // indirect
-	github.com/whyrusleeping/cbor-gen v0.0.0-20220302191723-37c43cae8e14 // indirect
+	github.com/whyrusleeping/cbor-gen v0.0.0-20220323183124-98fa8256a799 // indirect
 	github.com/whyrusleeping/chunker v0.0.0-20181014151217-fe64bd25879f // indirect
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/whyrusleeping/ledger-filecoin-go v0.9.1-0.20201010031517-c3dcc1bddce4 // indirect
